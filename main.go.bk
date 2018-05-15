@@ -1,0 +1,181 @@
+// package main
+
+// import (
+// 	"fmt"
+// 	"net/http"
+
+// 	"./api"
+// 	"github.com/gorilla/mux"
+// )
+
+// func main() {
+// 	r := mux.NewRouter()
+// 	r.HandleFunc("/api/items", api.GetAllItems).Methods("GET")
+// 	r.HandleFunc("/api/items/{id}", api.GetItem).Methods("GET")
+// 	//r.HandleFunc("/api/items", api.PostItem).Methods("POST")
+// 	r.HandleFunc("/api/items/{id}", api.DeleteItem).Methods("DELETE")
+
+// 	http.ListenAndServe(":3000", r)
+
+// 	fmt.Print("http://localhost:3000")
+// }
+
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/rs/cors"
+	"github.com/rs/rest-layer-mongo"
+	"github.com/rs/rest-layer/resource"
+	"github.com/rs/rest-layer/rest"
+	"github.com/rs/rest-layer/schema"
+	"gopkg.in/mgo.v2"
+)
+
+var (
+	user = schema.Schema{
+		Fields: schema.Fields{
+			"id":      schema.IDField,
+			"created": schema.CreatedField,
+			"updated": schema.UpdatedField,
+			"name": {
+				Required:   true,
+				Filterable: true,
+				Sortable:   true,
+				Validator: &schema.String{
+					MaxLen: 150,
+				},
+			},
+		},
+	}
+
+	author = schema.Schema{
+		Fields: schema.Fields{
+			"id":           schema.IDField,
+			"created_date": schema.CreatedField,
+			"updated_date": schema.UpdatedField,
+			"name": {
+				Required:   true,
+				Filterable: true,
+				Sortable:   true,
+				Validator: &schema.String{
+					MaxLen: 150,
+				},
+			},
+		},
+	}
+
+	quote = schema.Schema{
+		Fields: schema.Fields{
+			"id":           schema.IDField,
+			"created_date": schema.CreatedField,
+			"updated_date": schema.UpdatedField,
+			"name": {
+				Required:   true,
+				Filterable: true,
+				Sortable:   true,
+				Validator: &schema.String{
+					MaxLen: 150,
+				},
+			},
+			"author": {
+				Required:   true,
+				Filterable: true,
+				Validator: &schema.Reference{
+					Path: "authors",
+				},
+			},
+		},
+	}
+
+	ghnlog = schema.Schema{
+		Fields: schema.Fields{
+			"id":      schema.IDField,
+			"created": schema.CreatedField,
+			"updated": schema.UpdatedField,
+			"name": {
+				Required:   true,
+				Filterable: true,
+				Sortable:   true,
+				Validator: &schema.String{
+					MaxLen: 150,
+				},
+			},
+		},
+	}
+
+	// Define a post resource schema
+	post = schema.Schema{
+		Fields: schema.Fields{
+			"id":      schema.IDField,
+			"created": schema.CreatedField,
+			"updated": schema.UpdatedField,
+			"user": {
+				Required:   true,
+				Filterable: true,
+				Validator: &schema.Reference{
+					Path: "users",
+				},
+			},
+			"public": {
+				Filterable: true,
+				Validator:  &schema.Bool{},
+			},
+			"meta": {
+				Schema: &schema.Schema{
+					Fields: schema.Fields{
+						"title": {
+							Required: true,
+							Validator: &schema.String{
+								MaxLen: 150,
+							},
+						},
+						"body": {
+							Validator: &schema.String{
+								MaxLen: 100000,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+)
+
+func main() {
+	session, err := mgo.Dial("localhost")
+	if err != nil {
+		log.Fatalf("Can't connect to MongoDB: %s", err)
+	}
+	db := "cleverquote"
+
+	index := resource.NewIndex()
+
+	users := index.Bind("users", user, mongo.NewHandler(session, db, "users"), resource.Conf{
+		AllowedModes: resource.ReadWrite,
+	})
+
+	users.Bind("posts", "user", post, mongo.NewHandler(session, db, "posts"), resource.Conf{
+		AllowedModes: resource.ReadWrite,
+	})
+
+	author := index.Bind("authors", author, mongo.NewHandler(session, db, "Author"), resource.DefaultConf)
+	author.bind(":name", schema.FieldHandler )
+	author.Bind("quotes", "author", quote, mongo.NewHandler(session, db, "Quote"), resource.DefaultConf)
+
+	index.Bind("ghnlog", ghnlog, mongo.NewHandler(session, db, "enqueue_msg"), resource.DefaultConf)
+
+	api, err := rest.NewHandler(index)
+	if err != nil {
+		log.Fatalf("Invalid API configuration: %s", err)
+	}
+
+	http.Handle("/api/", cors.New(cors.Options{OptionsPassthrough: true}).Handler(http.StripPrefix("/api/", api)))
+
+	log.Print("Serving API on http://localhost:8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatal(err)
+	}
+}
