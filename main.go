@@ -79,7 +79,7 @@ func main() {
 	index := resource.NewIndex()
 
 	index.Bind("authors", author, mongo.NewHandler(session, db, "Author"), resource.DefaultConf)
-	index.Bind("quote", quote, mongo.NewHandler(session, db, "Quote"), resource.DefaultConf)
+	index.Bind("quotes", quote, mongo.NewHandler(session, db, "Quote"), resource.DefaultConf)
 
 	api, err := rest.NewHandler(index)
 	if err != nil {
